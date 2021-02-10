@@ -4,6 +4,53 @@ This example uses ONNX Runtime to pre-train the BERT PyTorch model maintained at
 
 You can run the training in Azure Machine Learning or on an Azure VM with NVIDIA GPU.
 
+## Quick Setup and Run
+This is a quick setup and run that works on dev3, since training data is already available. Still need to do below to make this setup generic:
+- Upload training data to a public location and add script to download the data
+- Change default training parameter (right now training throws memory error) and write a guide for training parameters
+
+
+```bash
+echo "Removing existing onnxruntime-training-examples directory..."
+sudo rm -rf onnxruntime-training-examples
+echo "Done"
+
+git clone https://github.com/microsoft/onnxruntime-training-examples.git
+cd onnxruntime-training-examples
+
+git clone --no-checkout https://github.com/NVIDIA/DeepLearningExamples.git
+cd DeepLearningExamples/
+git checkout 4733603577080dbd1bdcd51864f31e45d5196704
+cd ..
+
+echo "Copying files required for onnxruntime training over..."
+mkdir -p workspace
+mv DeepLearningExamples/PyTorch/LanguageModeling/BERT/ workspace
+rm -rf DeepLearningExamples
+cp -r ./nvidia-bert/ort_addon/* workspace/BERT
+
+cd nvidia-bert/docker
+# using content for nvidia-bert/docker/build.sh
+# TODO fix sudo docker
+sudo docker build --network=host . --rm -t onnxruntime-pytorch-for-bert 2>&1 | tee build.log
+cd ../..
+
+# TODO download data from Azure Blob, this is only tested on dev3
+echo "Set correct paths to training data for docker image..."
+sed -i "s/<replace-with-path-to-phase1-hdf5-training-data>/\/bert_data\/hdf5_lower_case_1_seq_len_128_max_pred_20_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5\/books_wiki_en_corpus\/train/" nvidia-bert/docker/launch.sh
+sed -i "s/<replace-with-path-to-phase2-hdf5-training-data>/\/bert_data\/hdf5_lower_case_1_seq_len_512_max_pred_80_masked_lm_prob_0.15_random_seed_12345_dupe_factor_5\/books_wiki_en_corpus\/train/" nvidia-bert/docker/launch.sh
+# TODO must use sudo docker on dev3, may not be necessary for machine with rootless docker setup
+sed -i "s/docker run/sudo docker run/" nvidia-bert/docker/launch.sh
+
+# Set the number of GPUs and per GPU limit.
+# Modify other training parameters
+# Edit workspace/BERT/scripts/run_pretraining_ort.sh
+
+echo "Running training in docker container"
+cd workspace/BERT
+../../nvidia-bert/docker/launch.sh "bash scripts/run_pretraining_ort.sh"
+```
+
 ## Setup
 
 1. Clone this repo
